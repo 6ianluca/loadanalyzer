@@ -1,0 +1,13 @@
+Installare django e leaflet
+
+sudo pip3 install django
+sudo pip3 install django-leaflet
+
+
+To run the server
+
+python3  manage.py runserver
+
+
+Open http://localhost:8000/home
+

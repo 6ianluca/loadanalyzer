@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+{% load static %}
+    <head>
+        <link rel="stylesheet" href = "{% static "/leaflet/leaflet.css" %}" />
+        <script src = "{% static "/leaflet/leaflet.js" %}" ></script>
+        <!--<link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.0/dist/leaflet.css" />
+		<script src="https://unpkg.com/leaflet@1.0.0/dist/leaflet.js"></script>-->
+        
+		<script src = "https://cdn.polyfill.io/v2/polyfill.min.js?features=Promise"></script>
+		<script src = "{% static "leaflet-bing-layer.js" %}" ></script>
+        <style media="screen">
+			#mappa {
+				height:100%;
+				}
+
+			input[type=text], select {
+				padding: 4px 10px;
+				margin: 4px 2;
+				display: inline-block;
+				border: 0px solid #ccc;
+				border-radius: 10px;
+				box-sizing: border-box;
+				background-color: #EE9900;
+				border-radius: 6px;
+				font-size: 16px;
+			}
+
+			input[type=file] {
+				padding: 1px 10px;
+				margin: 4px 2;
+				display: inline-block;
+				border: 0px solid #ccc;
+				border-radius: 10px;
+				box-sizing: border-box;
+				background-color: #EE9900;
+				border-radius: 6px;
+				font-size: 16px;
+			}
+
+			.button {
+				background-color: #EE9900;
+				border: None;
+				color: white;
+				padding: 4px 10px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 16px;
+				margin: 4px 2px;
+				cursor: pointer;
+				border-radius: 6px;
+			}
+				
+			.summary {
+				text-align: right;
+				line-height: 18px;
+				background-color: #FFF;
+				opacity: 0.8;
+				color: #000;
+			}
+			
+			.download {
+				text-align: right;
+				line-height: 18px;
+				background-color: #FFF;
+				opacity: 0.8;
+				color: #000;
+			}
+			
+			.legend {
+				text-align: left;
+				line-height: 18px;
+				color: #000;
+				background-color: #FFF;
+				opacity: 0.8;
+			}
+			.legend i {
+				width: 18px;
+				height: 18px;
+				float: left;
+				margin-right: 8px;
+				opacity: 0.5;
+			}
+		</style>
+		<!------- GLOBAL VARS --->
+		<script type="text/javascript">
+			var MarkerIcon = L.Icon.extend({
+				options: {
+					iconSize:     [25, 41], // size of the icon
+					iconAnchor:   [13, 41], // point of the icon which will correspond to marker's location
+				}
+			});
+			
+			
+			var startIcon = new MarkerIcon({iconUrl:  "{% static "/markers/marker-start.png" %}" });
+			var endIcon = new MarkerIcon({iconUrl:  "{% static "/markers/marker-end.png" %}" });
+			
+			
+			var sw = {{ sw }};
+			var ne = {{ ne }};
+			var tdf = {{ dataframes|safe }};
+			var selected = {{ selected }};
+			//alert(selected);
+			var startSelectionIndex = 0;
+			var endSelectionIndex = {{ endindex }} -1;
+			var startMarker = L.marker([0,0], {icon:startIcon});
+			var endMarker = L.marker([0,0], {icon:endIcon});
+			for(var name in tdf){
+				tdf[name] = JSON.parse(tdf[name]);
+			}
+			var colorsname = {{ colorsname|safe }};
+			var colorsbound = {{ colorsbound|safe }};
+		</script>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href = "{% static "/themes/jquery-ui.css" %}" >
+		<script src = "{% static "/javascripts/jquery-1.12.4.js" %}" ></script>
+		<script src = "{% static "/javascripts/jquery-ui.js" %}" ></script>
+		<script type="text/javascript" src="{% static "/javascripts/canvasjs/jquery.canvasjs.min.js" %}"></script>
+		<!--<p>"&nbsp;</p>-->
+		<!------- SLIDER & PRINT DATA --->
+		<script>
+			getdata = function() {
+				if (selected >= 0) {				
+						totmeters = tdf[selected].TotDistance[endSelectionIndex]
+							- tdf[selected].TotDistance[startSelectionIndex];
+						totseconds = (tdf[selected].Seconds[endSelectionIndex]
+							- tdf[selected].Seconds[startSelectionIndex]);
+						totmin = parseInt(totseconds/60);
+						secs =  parseInt(totseconds) - parseInt(totmin)*60 
+						speed = 3.6*totmeters/totseconds;
+						
+						var totload = 0;
+						var maxload = tdf[selected].VarLoadSmooth[startSelectionIndex]
+						for(var i = startSelectionIndex; i <= endSelectionIndex; i += 1){
+							totload += tdf[selected].VarLoadSmooth[i];
+							maxload = Math.max(maxload,tdf[selected].VarLoadSmooth[i]);
+						}
+						var avrgload = 1.0*totload/(endSelectionIndex-startSelectionIndex);
+						
+						$("#len").val(totmeters.toFixed(0));
+						$("#tottime").val(totmin + ":" + secs);
+						$("#speed").val(speed.toFixed(1));
+						$("#totload").val(totload.toFixed(2));
+						$("#maxload").val(maxload.toFixed(2));
+						$("#avrgload").val(avrgload.toFixed(2));
+					}
+			}
+			$( function() {
+				if (selected >= 0){
+					$( "#slider-range" ).slider({
+					  range: true,
+					  min: 0,
+					  max: Object.keys(tdf[selected].VarLoadSmooth).length-1,
+					  values: [ 0, Object.keys(tdf[selected].VarLoadSmooth).length-1 ],
+					  create: function(event, ui){
+						getdata();
+					  },
+					  slide: function( event, ui ) {
+						startSelectionIndex = ui.values[ 0 ];
+						endSelectionIndex = ui.values[ 1 ];
+						startMarker.setLatLng({
+									lat: tdf[selected].Latitude[startSelectionIndex],
+									lng: tdf[selected].Longitude[startSelectionIndex]
+									}
+								);
+						startMarker.update();
+					
+						endMarker.setLatLng({
+									lat: tdf[selected].Latitude[endSelectionIndex],
+									lng: tdf[selected].Longitude[endSelectionIndex]
+									}
+								);
+						endMarker.update();
+						
+						var chart = $("#chartContainer").CanvasJSChart();
+						var len = chart.options.data[0].dataPoints.length;
+						chart.options.axisX.stripLines[0].endValue = tdf[selected].TotDistance[endSelectionIndex];
+						chart.options.axisX.stripLines[0].startValue = tdf[selected].TotDistance[startSelectionIndex];
+						chart.render();	
+						
+						getdata();				
+					  }
+					});
+				}
+			} );
+		</script>
+		<!------- GRAPH --->
+		<script type="text/javascript">
+			window.onload = function () {
+				var data = [];
+
+				if( selected >= 0){
+					var limit = Object.keys(tdf[selected].VarLoadSmooth).length;
+					
+					var loadDataSeries = {
+						type: "splineArea", color: "red", legendText: 'Load', showInLegend: true,
+						lineThickness: 1,
+						toolTipContent: "<b>Load:</b> {y}",
+					};
+					var speedDataSeries = { type: "line", markerSize: 0,
+						color: "blue", legendText: 'Speed', showInLegend: true, axisYType: "secondary",
+						toolTipContent: "<b>Speed:</b> {y} km/h",
+					};
+					var loadDataPoints = [];
+					var speedDataPoints = [];
+					for (var i = 0; i < limit; i += 1) {
+						loadDataPoints.push({
+							x: tdf[selected].TotDistance[i],
+							y: tdf[selected].VarLoadSmooth[i],             
+						});
+						speedDataPoints.push({
+							x: tdf[selected].TotDistance[i],
+							y: tdf[selected].Speed[i],             
+						});
+
+					}
+					loadDataSeries.dataPoints = loadDataPoints;
+					speedDataSeries.dataPoints = speedDataPoints;
+					data.push(loadDataSeries);
+					data.push(speedDataSeries);
+				}
+				
+				var options = {
+					zoomEnabled: true,
+					panEnabled: true,
+					 toolTip: {
+						shared: true,
+						borderThickness: 0,	
+						contentFormatter: function(e){
+						  var str = "";
+						  for (var i = 0; i < e.entries.length; i++){
+							var  temp = e.entries[i].dataSeries.name +  e.entries[i].dataPoint.y + "<br/>" ; 
+							str = str.concat(temp);
+						  }
+						  return (str);
+						}
+					  },					legend: {
+						horizontalAlign: "center",
+						verticalAlign: "bottom"        
+					},
+					axisY2: {
+						title: "Speed (km/h)",
+						includeZero: false
+					},
+					axisY: {
+						title: "Load",
+						includeZero: false,
+					},
+					axisX:{
+						stripLines:[
+						{                
+							startValue: 0,
+							endValue: 0,                
+							color:"#d8d8d8"                      
+						}
+						],
+						valueFormatString: "####"
+					},
+					data: data
+				};
+				
+				$("#chartContainer").CanvasJSChart(options);
+			}   			
+		</script>
+		<!--------------- DRAWS the tracks on the MAP  ---------------------->
+		<script>
+				function main_map_init(map){
+					
+					var summary = L.control({position: 'topleft'});
+					
+					summary.onAdd = function(map){
+						var div = L.DomUtil.create('div', 'info summary');
+
+						div.innerHTML += '<div style="color:#0000FF">';
+						div.innerHTML += '<label for="len"><b>Length (m):</b></label><input type="text" id="len" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '<label for="tottime"><b>Time (min:secs):</b></label><input type="text" id="tottime" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '<label for="speed"><b>Speed (km/h):</b></label><input type="text" id="speed" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '<label for="totload"><b>Tot. Load:</b></label><input type="text" id="totload" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '<label for="maxload"><b>Max. Load:</b></label><input type="text" id="maxload" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '<label for="avrgload"><b>Avg. Load:</b></label><input type="text" id="avrgload" readonly size="10" style="border:0; background:transparent"><br>';
+						div.innerHTML += '</div>';
+						
+						return div;
+					}
+					
+					summary.addTo(map);
+					
+					var legend = L.control({position: 'topleft'});
+					
+					legend.onAdd = function(map){
+						var div = L.DomUtil.create('div', 'info legend');
+						var from = 0, to = colorsbound[0].toFixed(2)
+						for(var i = 0; i < colorsname.length; i += 1){
+							if(i != colorsname.length -1){
+								div.innerHTML += '<i style="background:'+colorsname[i]+'">'+'</i>'+from+'&ndash;'+to+'<br>';
+								to = colorsbound[i+1].toFixed(2);
+							} else
+								div.innerHTML += '<i style="background:'+colorsname[i]+'">'+'</i>'+from+'&ndash;'+to+'<br>';
+							from = colorsbound[i].toFixed(2);
+						}
+						return div;
+					}
+					
+					if(tdf.length>0)
+						legend.addTo(map);
+					
+					var download = L.control({position: 'topleft'});
+					
+					download.onAdd = function(map){
+						var div = L.DomUtil.create('div', 'info download');
+						div.innerHTML += '<a href="{% static "/mobileapp/mla.apk" %}"  >Download mobile app</a>';
+						return div;
+					}
+					
+					download.addTo(map);
+					
+					
+					for(var i in tdf){
+						var l = Object.keys(tdf[i].Latitude).length;
+						if( selected == i ){
+							size = 5;
+							opacity = 0.8;
+						} else {
+							size = 3;
+							opacity = 0.3;
+						}
+						for( var j = 1; j < l; j++){ 
+							L.polyline([
+								[tdf[i].Latitude[j-1],tdf[i].Longitude[j-1]],
+								[tdf[i].Latitude[j],tdf[i].Longitude[j]]
+								], {color: tdf[i].Color[j], weight: size, opacity: opacity}
+							).addTo(map);
+						}
+					}
+					if(selected != -1){
+						startMarker.setLatLng({
+							lat: tdf[selected].Latitude[startSelectionIndex],
+							lng: tdf[selected].Longitude[startSelectionIndex]
+							},
+							{icon: startIcon}
+						);
+						startMarker.addTo(map);
+						startMarker.update();
+						endSelectionIndex = Object.keys(tdf[selected].VarLoadSmooth).length-1;
+						endMarker.setLatLng({
+							lat: tdf[selected].Latitude[endSelectionIndex],
+							lng: tdf[selected].Longitude[endSelectionIndex]
+							},
+							{icon: endIcon}
+						);
+						endMarker.addTo(map);
+						endMarker.update();
+					}
+					$(window).on("resize", function() {
+						$("#mappa").height($(window).height() - 370);//.width($(window).width());
+						//$("#mappa").height(500)
+						map.invalidateSize();
+					}).trigger("resize");
+					
+					map.fitBounds([[ sw[0], sw[1] ], [ne[0], ne[1]]])
+			}
+		</script>
+
+	
+    </head>
+    
+    <!-------------------------------------------------------
+    ---------------------------------------------------------
+    --------------------------------------------------------->
+    <body>
+		<!-- <h1>LoadAnalyzer</h1>-->
+				
+		<div style="height=100%;float:left;width:95%">
+			
+			<div> <!--  FORM selection track --->
+				<form action="{% url 'selected' %}" method="post">
+					{% csrf_token %}				
+					<label><b>Track list <b></label>			
+						{{ filelist.filelist }}
+						<input class='button' type="submit" value="Select">
+						<input class='button' type="submit" value="Delete" name="deletebutton">
+						<input class='button' type="submit" value="Zoom" name="zoombutton">				
+				</form>
+				
+				<!-- Upload form. Note enctype attribute! -->
+				<form action="{% url 'home' %}" method="post" enctype="multipart/form-data">
+					{% csrf_token %}
+					{{ selfileform.non_field_errors }}
+					<!--<p>{{ selfileform.docfile.label_tag }} {{ selfileform.docfile.help_text }}</p>-->
+					<label>Add new track</label>
+						{{ selfileform.docfile.errors }}
+						{{ selfileform.docfile }}
+						<input class='button' type="submit" value="Upload"/>
+				</form>
+				
+			</div>	
+			
+			<!-- GRAPH -->
+			<div id="chartContainer" style="height: 150px; width: 100%;"></div> 				
+			
+			<!--  SLIDER & INFOS--->
+			<div id="slider-range"></div>
+			
+			<p></p>
+
+			<!-----MAPPA--->
+			<div id="mappa"  style="height=100%" callback="main_map_init">
+			</div>
+
+			<script>
+				var BING_KEY = 'AryMzJcNBKxhVqO8w9E3iDWBPHhiwbeKOpGGlQuAUFC8p8tQbuyt9r12VAqEWbcT';				
+				var mapnik = L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {});
+				var cycle = L.tileLayer('http://a.tile.opencyclemap.org/cycle/{z}/{x}/{y}.png', {});
+				
+				var map = L.map('mappa', {layers: [mapnik, cycle], zoomControl: false });
+				
+				var bing = L.tileLayer.bing(BING_KEY).addTo(map);
+				var ctrLayer = L.tileLayer.wms('http://cartografia.regione.lazio.it/erdas-iws/ogc/wms?', {
+    layers: 'CTR 1:5000_Mosaico_CTR5K_EPSG3004.ecw'
+}).addTo(map);
+				
+				L.control.layers({'CTR Lazio':ctrLayer, 'Bing':bing, 'Street':mapnik, 'Cycle':cycle}).addTo(map);
+				L.control.zoom({'position': 'topright'}).addTo(map);
+				main_map_init(map);
+			</script>
+		</div>
+			
+				
+			</div>
+		</div>
+    </body>
+</html>
